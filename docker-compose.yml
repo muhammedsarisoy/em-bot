@@ -1,0 +1,15 @@
+# Sunucuda: docker compose up -d --build
+# Dışarıya port açmaz; sadece Telegram ve Yahoo'ya giden bağlantı kurar.
+services:
+  em-bot:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    mem_limit: 400m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
