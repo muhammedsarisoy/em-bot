@@ -32,7 +32,7 @@ Her haberin açıklanmasına 5 dakika kala ayrıca hatırlatma gelir. Aynı saat
 
 - **Varsayılan para birimleri:** USD ve EUR. `.env` içindeki `NEWS_CURRENCIES` ile değiştirilebilir; `ALL` hepsini getirir.
 - **Diğer ayarlar:** bülten saati `NEWS_HOUR` ile, hatırlatma süresi `NEWS_REMIND_MINUTES` ile değiştirilir (0 = kapalı).
-- **Açıklanan değer:** ForexFactory'nin JSON dışa aktarımında açıklanan değer (actual) alanı yok. Bu yüzden bot şimdilik açıklanan değeri göndermiyor.
+- **Açıklanan değer:** ForexFactory'nin JSON dışa aktarımında açıklanan değer (actual) yok. Bu değer [Financial Modeling Prep](https://site.financialmodelingprep.com) API'sinden alınır. `.env` içine `FMP_API_KEY` yazılınca bot, haber saatinden sonra 30 dakika boyunca dakikada bir sonucu kontrol eder. Sonuç gelince beklentiyle birlikte gönderir: ▲ beklenti üstü, ▼ altı, = beklentide. Haberler para birimi, saat ve isim benzerliğine göre eşleştirilir. Konuşma ve basın toplantısı gibi rakamı olmayan haberlerin sonucu gönderilmez.
 - **Gönderim penceresi:** mesaj sadece 08:00-10:00 arasında gönderilir. Bot bu saatlerde kapalıysa o günün mesajı atlanır; gün içinde `/haber` ile istenebilir.
 - **İstek sınırı:** ForexFactory sık istekte engelliyor (HTTP 429). Bu yüzden takvim 30 dakika önbellekte tutulur. Takvim alınamazsa bot bir saat boyunca 5 dakikada bir tekrar dener, olmazsa uyarı gönderir.
 

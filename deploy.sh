@@ -11,7 +11,7 @@ source deploy.env
 : "${DEPLOY_KEY:?deploy.env içinde DEPLOY_KEY yok}"
 DEPLOY_DIR=${DEPLOY_DIR:-em-bot}
 
-FILES="Dockerfile docker-compose.yml .dockerignore requirements.txt levels.py engine.py feed.py tg.py chart.py news.py main.py README.md"
+FILES="Dockerfile docker-compose.yml .dockerignore requirements.txt levels.py engine.py feed.py tg.py chart.py news.py fmp.py main.py README.md"
 [ "${1:-}" = "--env" ] && FILES="$FILES .env"
 
 ssh -i "$DEPLOY_KEY" "$DEPLOY_HOST" "mkdir -p $DEPLOY_DIR/data && chmod 700 $DEPLOY_DIR"

@@ -5,13 +5,14 @@ import os
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 import chart
 import feed
+import fmp
 import news
 from engine import Engine
 from levels import LEVELS, Symbol, fmt, parse_week, zone
@@ -67,6 +68,9 @@ class Bot:
         self.news_before = int(os.getenv("NEWS_REMIND_MINUTES", "5"))
         self.news_retry_at = 0.0
         self.news_reminded: set[str] = set()
+        self.fmp_key = os.getenv("FMP_API_KEY", "").strip()
+        self.fmp_next = 0.0
+        self.results_sent: set[str] = set()
         self.lock = threading.Lock()
         self.muted_until = 0.0
         self.set_at: datetime | None = None
@@ -94,6 +98,7 @@ class Bot:
         while True:
             self._morning_news()
             self._news_reminders()
+            self._news_results()
             if feed.market_open():
                 self.tick()
             time.sleep(self.poll)
@@ -141,6 +146,37 @@ class Bot:
         self.news_reminded.update(news.key(e) for e in new)
         for at in sorted({e["at"] for e in new}):
             msg = news.reminder(self.news_currencies, [e for e in new if e["at"] == at])
+            log.info(msg.replace("\n", " | "))
+            self.notify(msg)
+
+    def _news_results(self) -> None:
+        """Açıklanan haberlerin sonucu (FMP). Haber saatinden sonra 30 dk boyunca dakikada bir bakılır."""
+        if not self.fmp_key or time.time() < self.fmp_next:
+            return
+        now = datetime.now(news.TR)
+        try:
+            recent = news.upcoming(self.news_currencies, now - timedelta(minutes=30), timedelta(minutes=30))
+        except Exception:
+            return
+        # Konuşma/basın toplantısı gibi rakamı olmayan haberlerin sonucu da olmaz
+        pending = [e for e in recent if (e["forecast"] or e["previous"]) and news.key(e) not in self.results_sent]
+        if not pending:
+            return
+        self.fmp_next = time.time() + 60  # ücretsiz plan: günlük istek sınırı var
+        fmp_events = []
+        try:
+            for day in sorted({e["at"].astimezone(timezone.utc).date() for e in pending}):
+                fmp_events += fmp.fetch(self.fmp_key, day)
+        except Exception as e:
+            log.warning("FMP alınamadı: %s", e)
+            return
+        found = []
+        for i, d in fmp.match_all(pending, fmp_events).items():
+            if fmp.has_actual(d):
+                found.append((pending[i], d))
+                self.results_sent.add(news.key(pending[i]))
+        for at in sorted({e["at"] for e, _ in found}):
+            msg = fmp.result_message(self.news_currencies, [(e, d) for e, d in found if e["at"] == at])
             log.info(msg.replace("\n", " | "))
             self.notify(msg)
 
