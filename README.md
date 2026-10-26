@@ -24,6 +24,14 @@ Mesajlarda hedef olarak bir sonraki quadrant yazar (TOP için Q+0.5).
 
 Aynı seviyeye tekrar bildirim gelmesi için fiyatın seviyeden `REARM_EM` (varsayılan 0.25 EM) uzaklaşması gerekir.
 
+## Sabah haber bülteni
+
+Hafta içi her sabah 08:00'de (Türkiye saati) ForexFactory takviminden önümüzdeki 24 saatin kırmızı (High) ve turuncu (Medium) haberleri gelir. Liste saat, haber adı, beklenti ve önceki değeri içerir. Gece gelen haberler "gece" etiketiyle gösterilir.
+
+- **Varsayılan para birimi:** sadece USD. `.env` içindeki `NEWS_CURRENCIES` ile değiştirilebilir, örneğin `USD,EUR`; `ALL` hepsini getirir. Saat `NEWS_HOUR` ile değiştirilir.
+- **Gönderim penceresi:** mesaj sadece 08:00-10:00 arasında gönderilir. Bot bu saatlerde kapalıysa o günün mesajı atlanır; gün içinde `/haber` ile istenebilir.
+- **İstek sınırı:** ForexFactory sık istekte engelliyor (HTTP 429). Bu yüzden takvim 30 dakika önbellekte tutulur. Takvim alınamazsa bot bir saat boyunca 5 dakikada bir tekrar dener, olmazsa uyarı gönderir.
+
 ## Kurulum
 
 Bot sunucuda Docker container olarak 7/24 çalışır (örneğin AWS Lightsail). Bilgisayarın açık olması gerekmez. Dışarıya port açmaz; sadece Telegram'a ve Yahoo'ya bağlanır.
@@ -41,6 +49,7 @@ Sohbette `/` yazınca komut menüsü açılır.
 
 - `/durum`: tüm pariteler EM içinde nerede
 - `/durum NVDA`: bu haftanın 15m grafiği, EM seviyeleri çizili. Zaman dilimi seçilebilir: `/durum NVDA 5m`, `1h`
+- `/haber`: önümüzdeki 24 saatin kırmızı/turuncu ForexFactory haberleri
 - `/seviye NVDA`: bir paritenin tüm seviyeleri
 - `/sessiz 30`, `/ac`: bildirimleri kapat/aç
 - `/test`: saate bildirim düşüyor mu dene

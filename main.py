@@ -12,17 +12,20 @@ from dotenv import load_dotenv
 
 import chart
 import feed
+import news
 from engine import Engine
 from levels import LEVELS, Symbol, fmt, parse_week, zone
 from tg import Telegram
 
 ROOT = Path(__file__).parent
 WEEK_FILE = ROOT / "data" / "week.json"
+NEWS_FILE = ROOT / "data" / "news_sent"  # son sabah haber bildiriminin tarihi
 log = logging.getLogger("em-bot")
 
 # Telegram'da '/' yazınca açılan menü
 COMMANDS = [
     ("durum", "Pariteler EM içinde nerede · /durum NVDA: grafik"),
+    ("haber", "Önümüzdeki 24 saatin kırmızı/turuncu haberleri"),
     ("seviye", "Bir paritenin tüm seviyeleri · /seviye NVDA"),
     ("sessiz", "Bildirimleri kapat · /sessiz 30 (dk)"),
     ("ac", "Bildirimleri aç"),
@@ -35,6 +38,7 @@ Haftalık veri: sembol + PWC + EM listesini olduğu gibi yapıştır (komut gere
 /durum - pariteler EM içinde nerede
 /durum NVDA - bu haftanın 15m grafiği, EM seviyeleri çizili
 /durum NVDA 5m - zaman dilimi seç: 5m, 15m, 1h
+/haber - önümüzdeki 24 saatin kırmızı/turuncu haberleri (her hafta içi sabah da otomatik gelir)
 /seviye NVDA - bir paritenin tüm seviyeleri
 /sessiz 30 - 30 dk bildirim kapalı (varsayılan 60)
 /ac - bildirimleri aç
@@ -58,6 +62,9 @@ class Bot:
         self.poll = int(os.getenv("POLL_SECONDS", "30"))
         self.rearm = float(os.getenv("REARM_EM", "0.25"))
         self.swing_len = int(os.getenv("SWING_LEN", "2"))
+        self.news_hour = int(os.getenv("NEWS_HOUR", "8"))
+        self.news_currencies = {c.strip().upper() for c in os.getenv("NEWS_CURRENCIES", "USD").split(",") if c.strip()}
+        self.news_retry_at = 0.0
         self.lock = threading.Lock()
         self.muted_until = 0.0
         self.set_at: datetime | None = None
@@ -83,9 +90,36 @@ class Bot:
         log.info("başladı, %d parite", len(self.engine.symbols))
         self.notify(f"EM bot başladı · {len(self.engine.symbols)} parite")
         while True:
+            self._morning_news()
             if feed.market_open():
                 self.tick()
             time.sleep(self.poll)
+
+    def _morning_news(self) -> None:
+        """Hafta içi her sabah NEWS_HOUR'da (TR) önümüzdeki 24 saatin haberleri, günde bir kez.
+
+        Sadece NEWS_HOUR'dan sonraki 2 saat içinde gönderilir; bot gün ortasında açılırsa
+        o günün sabah mesajı geç gelmesin (gerekirse /haber var).
+        """
+        now = datetime.now(news.TR)
+        in_window = self.news_hour <= now.hour < self.news_hour + 2
+        if now.weekday() >= 5 or not in_window or time.time() < self.news_retry_at:
+            return
+        today = now.date().isoformat()
+        if NEWS_FILE.exists() and NEWS_FILE.read_text().strip() == today:
+            return
+        try:
+            msg = news.message(self.news_currencies, now.replace(hour=self.news_hour, minute=0, second=0, microsecond=0))
+        except Exception as e:
+            log.warning("haber takvimi alınamadı: %s", e)
+            self.news_retry_at = time.time() + 300  # siteyi sıkıştırma, 5 dk sonra tekrar
+            if now.hour < self.news_hour + 1:  # ilk saat boyunca sessizce tekrar dene
+                return
+            msg = "⚠️ ForexFactory haber takvimi alınamadı"
+        NEWS_FILE.parent.mkdir(exist_ok=True)
+        NEWS_FILE.write_text(today)
+        log.info(msg.replace("\n", " | "))
+        self.notify(msg)
 
     def tick(self) -> None:
         with self.lock:
@@ -162,6 +196,8 @@ class Bot:
             return HELP
         if cmd == "/durum":
             return self.chart(arg.upper(), parts[2].lower() if len(parts) > 2 else "15m") if arg else self.status()
+        if cmd == "/haber":
+            return news.message(self.news_currencies, datetime.now(news.TR))
         if cmd == "/seviye":
             return self.levels(arg.upper())
         if cmd == "/sessiz":
