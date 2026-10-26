@@ -260,7 +260,7 @@ class Bot:
         if cmd == "/seviye":
             return self.levels(arg.upper())
         if cmd == "/sessiz":
-            mins = int(arg) if arg.isdigit() else 60
+            mins = min(int(arg), 24 * 60) if arg.isdigit() else 60  # en fazla 1 gün
             self.muted_until = time.time() + mins * 60
             return f"🔕 {mins} dk sessiz"
         if cmd == "/ac":
