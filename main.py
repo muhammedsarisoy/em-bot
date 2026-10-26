@@ -1,31 +1,53 @@
 """EM seviye bildirim botu: Yahoo 1m fiyatlar -> dokunuş/kırılım -> Telegram."""
 import json
 import logging
-import math
 import os
 import threading
 import time
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+import chart
 import feed
 from engine import Engine
-from levels import LABEL, LEVELS, Symbol, fmt, parse_week
+from levels import LEVELS, Symbol, fmt, parse_week, zone
 from tg import Telegram
 
 ROOT = Path(__file__).parent
 WEEK_FILE = ROOT / "data" / "week.json"
 log = logging.getLogger("em-bot")
 
+# Telegram'da '/' yazınca açılan menü
+COMMANDS = [
+    ("durum", "Pariteler EM içinde nerede · /durum NVDA: grafik"),
+    ("seviye", "Bir paritenin tüm seviyeleri · /seviye NVDA"),
+    ("sessiz", "Bildirimleri kapat · /sessiz 30 (dk)"),
+    ("ac", "Bildirimleri aç"),
+    ("test", "Saate bildirim düşüyor mu dene"),
+    ("yardim", "Komut listesi"),
+]
+
 HELP = """EM bot komutları
 Haftalık veri: sembol + PWC + EM listesini olduğu gibi yapıştır (komut gerekmez).
-/durum  - pariteler EM içinde nerede
+/durum - pariteler EM içinde nerede
+/durum NVDA - bu haftanın 15m grafiği, EM seviyeleri çizili
+/durum NVDA 5m - zaman dilimi seç: 5m, 15m, 1h
 /seviye NVDA - bir paritenin tüm seviyeleri
 /sessiz 30 - 30 dk bildirim kapalı (varsayılan 60)
 /ac - bildirimleri aç
 /test - saate bildirim düşüyor mu dene"""
+
+# /durum NVDA <tf> için kabul edilen yazımlar -> Yahoo aralığı
+INTERVALS = {"5": "5m", "5m": "5m", "15": "15m", "15m": "15m", "60": "60m", "60m": "60m", "1h": "60m"}
+
+
+@dataclass
+class Photo:
+    png: bytes
+    caption: str
 
 
 class Bot:
@@ -56,6 +78,7 @@ class Bot:
 
     # ── fiyat döngüsü ─────────────────────────────────────
     def run(self) -> None:
+        self.tg.set_commands(COMMANDS)
         threading.Thread(target=self.commands, daemon=True).start()
         log.info("başladı, %d parite", len(self.engine.symbols))
         self.notify(f"EM bot başladı · {len(self.engine.symbols)} parite")
@@ -127,16 +150,18 @@ class Bot:
                 except Exception as e:
                     log.exception("komut hatası")
                     reply = f"Hata: {e}"
-                if reply:
+                if isinstance(reply, Photo):
+                    self.tg.send_photo(chat, reply.png, reply.caption)
+                elif reply:
                     self.tg.send(chat, reply)
 
-    def handle(self, text: str) -> str:
+    def handle(self, text: str) -> str | Photo:
         parts = text.split()
         cmd, arg = parts[0].lower().split("@")[0], (parts[1] if len(parts) > 1 else "")
         if cmd in ("/start", "/yardim", "/help"):
             return HELP
         if cmd == "/durum":
-            return self.status()
+            return self.chart(arg.upper(), parts[2].lower() if len(parts) > 2 else "15m") if arg else self.status()
         if cmd == "/seviye":
             return self.levels(arg.upper())
         if cmd == "/sessiz":
@@ -183,20 +208,32 @@ class Bot:
         for s in engine.symbols.values():
             if s.name in prices:
                 z = s.z(prices[s.name])
-                if z >= 3:
-                    zone = "3X TOP üstü"
-                elif z < -3:
-                    zone = "3X BOTTOM altı"
-                else:
-                    lo = math.floor(z * 2) / 2
-                    zone = f"{LABEL[lo]}↔{LABEL[lo + 0.5]}"
-                rows.append((z, f"{s.name} {fmt(prices[s.name])} · {z:+.2f} EM · {zone}"))
+                rows.append((z, f"{s.name} {fmt(prices[s.name])} · {z:+.2f} EM · {zone(z)}"))
             else:
                 rows.append((-99, f"{s.name} fiyat yok"))
         head = f"Hafta verisi: {self.set_at:%d.%m}" if self.set_at else ""
         if time.time() < self.muted_until:
             head += f" · 🔕 {datetime.fromtimestamp(self.muted_until):%H:%M}'e kadar"
         return "\n".join([head] + [r for _, r in sorted(rows, reverse=True)])
+
+    def chart(self, name: str, tf: str) -> str | Photo:
+        s = self.engine.symbols.get(name)
+        if not s:
+            return f"Parite yok: {name}. Örnek: /durum NVDA"
+        interval = INTERVALS.get(tf)
+        if not interval:
+            return "Zaman dilimi: 5m, 15m veya 1h. Örnek: /durum NVDA 5m"
+        df = feed.fetch([s.ticker], period="5d", interval=interval).get(s.ticker)
+        if df is None:
+            return f"{name} için fiyat verisi alınamadı"
+        # Bu haftanın mumları; hafta yeni başladıysa (az mum) son 5 gün
+        monday = (datetime.now(feed.NY) - timedelta(days=datetime.now(feed.NY).weekday())).date()
+        week = df[df.index.date >= monday]
+        if len(week) >= 10:
+            df = week
+        z = s.z(float(df["Close"].iloc[-1]))
+        caption = f"{s.name} {fmt(float(df['Close'].iloc[-1]))} · {z:+.2f} EM · {zone(z)}"
+        return Photo(chart.render(s, df, interval.replace("60m", "1h")), caption)
 
     def levels(self, name: str) -> str:
         s = self.engine.symbols.get(name)

@@ -17,6 +17,28 @@ class Telegram:
         except requests.RequestException as e:
             log.warning("gönderilemedi: %s", e)
 
+    def send_photo(self, chat_id: int, png: bytes, caption: str = "") -> None:
+        try:
+            requests.post(
+                f"{self.url}/sendPhoto",
+                data={"chat_id": chat_id, "caption": caption},
+                files={"photo": ("grafik.png", png, "image/png")},
+                timeout=30,
+            )
+        except requests.RequestException as e:
+            log.warning("fotoğraf gönderilemedi: %s", e)
+
+    def set_commands(self, commands: list[tuple[str, str]]) -> None:
+        """Sohbette '/' yazınca açılan komut menüsü."""
+        try:
+            requests.post(
+                f"{self.url}/setMyCommands",
+                json={"commands": [{"command": c, "description": d} for c, d in commands]},
+                timeout=15,
+            )
+        except requests.RequestException as e:
+            log.warning("komut menüsü ayarlanamadı: %s", e)
+
     def broadcast(self, text: str) -> None:
         for chat_id in self.allowed:
             self.send(chat_id, text)

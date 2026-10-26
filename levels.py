@@ -1,4 +1,5 @@
 """Haftalık EM seviyeleri: her seviye PWC + k * EM."""
+import math
 import re
 from dataclasses import dataclass
 
@@ -51,6 +52,16 @@ def target(k: float) -> float:
 
 def fmt(x: float) -> str:
     return f"{x:,.2f}"
+
+
+def zone(z: float) -> str:
+    """Fiyatın bulunduğu iki seviye arası, ör. 'PWC↔Q+0.5'."""
+    if z >= 3:
+        return "3X TOP üstü"
+    if z < -3:
+        return "3X BOTTOM altı"
+    lo = math.floor(z * 2) / 2
+    return f"{LABEL[lo]}↔{LABEL[lo + 0.5]}"
 
 
 _SYMBOL = re.compile(r"[A-Za-z]{1,6}")

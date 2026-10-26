@@ -37,7 +37,13 @@ Bot sunucuda Docker container olarak 7/24 çalışır (örneğin AWS Lightsail).
 
 ## Komutlar
 
-`/durum` `/seviye NVDA` `/sessiz 30` `/ac` `/test` `/yardim`
+Sohbette `/` yazınca komut menüsü açılır.
+
+- `/durum`: tüm pariteler EM içinde nerede
+- `/durum NVDA`: bu haftanın 15m grafiği, EM seviyeleri çizili. Zaman dilimi seçilebilir: `/durum NVDA 5m`, `1h`
+- `/seviye NVDA`: bir paritenin tüm seviyeleri
+- `/sessiz 30`, `/ac`: bildirimleri kapat/aç
+- `/test`: saate bildirim düşüyor mu dene
 
 ## Sunucu işlemleri
 
