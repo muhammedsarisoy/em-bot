@@ -26,28 +26,32 @@ Aynı seviyeye tekrar bildirim gelmesi için fiyatın seviyeden `REARM_EM` (vars
 
 ## Kurulum
 
+Bot sunucuda Docker container olarak 7/24 çalışır (örneğin AWS Lightsail). Bilgisayarın açık olması gerekmez. Dışarıya port açmaz; sadece Telegram'a ve Yahoo'ya bağlanır.
+
 1. Telegram'da @BotFather'a yaz: `/newbot`. Verdiği token'ı kopyala.
-2. `.env.example` dosyasını `.env` olarak kopyala ve `TELEGRAM_TOKEN` alanını doldur.
-3. `run.bat` ile botu başlat. Telegram'da bota herhangi bir mesaj yaz: sana chat ID'ni söyler.
-4. Bu ID'yi `.env` içindeki `ALLOWED_CHAT_IDS` alanına yaz ve botu yeniden başlat. Bot bundan sonra yalnızca bu ID'ye cevap verir.
-5. Haftalık veriyi (sembol, PWC, EM) olduğu gibi bota yapıştır.
+2. `.env.example` dosyasını `.env` olarak kopyala ve `TELEGRAM_TOKEN` alanını doldur. `ALLOWED_CHAT_IDS` alanını şimdilik boş bırak.
+3. `deploy.env.example` dosyasını `deploy.env` olarak kopyala, sunucu adresini ve SSH anahtarını yaz.
+4. `./deploy.sh --env` çalıştır. Sunucuda Docker image'ı build edilir ve bot başlar.
+5. Telegram'da bota herhangi bir mesaj yaz; sana chat ID'ni söyler. Bu ID'yi `.env` içindeki `ALLOWED_CHAT_IDS` alanına yaz ve `./deploy.sh --env` ile tekrar gönder. Bot bundan sonra yalnızca bu ID'ye cevap verir.
+6. Haftalık veriyi (sembol, PWC, EM) olduğu gibi bota yapıştır.
 
 ## Komutlar
 
 `/durum` `/seviye NVDA` `/sessiz 30` `/ac` `/test` `/yardim`
 
-## Sunucu
+## Sunucu işlemleri
 
-Bot, Docker kurulu herhangi bir Linux sunucuda container olarak çalışır (örneğin AWS Lightsail). Dışarıya port açmaz.
+- **Kod güncellemek:** `./deploy.sh`. `.env` değiştiyse `./deploy.sh --env`.
+- **Logları görmek:** sunucuda `cd em-bot && docker compose logs -f`.
+- **Hafta verisi:** sunucudaki `~/em-bot/data/week.json` dosyasında durur.
+- **Yeniden başlatma:** container `restart: unless-stopped` ile çalışır. Çökerse ya da sunucu yeniden başlarsa bot kendiliğinden açılır.
 
-- İlk kurulum: `deploy.env.example` dosyasını `deploy.env` olarak kopyala, sunucu adresini ve SSH anahtarını yaz, sonra `./deploy.sh --env` çalıştır.
-- Kod güncellemek için: `./deploy.sh`. `.env` değiştiyse `./deploy.sh --env`.
-- Logları görmek için sunucuda: `cd em-bot && docker compose logs -f`
-- Hafta verisi sunucudaki `~/em-bot/data/week.json` dosyasında durur.
-- Sunucu bot çalışırken `run.bat` ile yerelde **çalıştırma**. Aynı token'la iki bot çalışırsa Telegram çakışır ve bildirimler iki kez gelir.
+## Yerelde deneme
+
+`run.bat`, sadece geliştirme sırasında kodu yerelde denemek için var. Sunucudaki bot çalışırken yerelde **çalıştırma**: aynı token'la iki bot çalışırsa Telegram çakışır ve bildirimler iki kez gelir.
 
 ## Notlar
 
-- Fiyatlar Yahoo Finance'ten gelir. Ücretsizdir ama resmi bir kaynak değildir ve birkaç saniye gecikebilir.
-- Bot yalnızca ABD seans saatinde (09:30-16:00 New York) fiyat kontrol eder. Bu saatlerde laptop açık olmalı ve uyku moduna geçmemeli.
-- SPX ve NDX, Yahoo'da `^GSPC` ve `^NDX` olarak çekilir. Yeni bir eşleme gerekirse `levels.py` içindeki `YAHOO` sözlüğüne ekle.
+- **Fiyat kaynağı:** fiyatlar Yahoo Finance'ten gelir. Ücretsizdir ama resmi bir kaynak değildir ve birkaç saniye gecikebilir.
+- **Çalışma saatleri:** bot fiyatları yalnızca ABD seans saatinde (09:30-16:00 New York) kontrol eder. Komutlara her zaman cevap verir.
+- **Sembol eşlemesi:** SPX ve NDX, Yahoo'da `^GSPC` ve `^NDX` olarak çekilir. Yeni bir eşleme gerekirse `levels.py` içindeki `YAHOO` sözlüğüne ekle.
