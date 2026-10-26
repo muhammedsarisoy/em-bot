@@ -28,7 +28,11 @@ Aynı seviyeye tekrar bildirim gelmesi için fiyatın seviyeden `REARM_EM` (vars
 
 Hafta içi her sabah 08:00'de (Türkiye saati) ForexFactory takviminden önümüzdeki 24 saatin kırmızı (High) ve turuncu (Medium) haberleri gelir. Liste saat, haber adı, beklenti ve önceki değeri içerir. Gece gelen haberler "gece" etiketiyle gösterilir.
 
-- **Varsayılan para birimi:** sadece USD. `.env` içindeki `NEWS_CURRENCIES` ile değiştirilebilir, örneğin `USD,EUR`; `ALL` hepsini getirir. Saat `NEWS_HOUR` ile değiştirilir.
+Her haberin açıklanmasına 5 dakika kala ayrıca hatırlatma gelir. Aynı saatteki haberler tek mesajda toplanır.
+
+- **Varsayılan para birimleri:** USD ve EUR. `.env` içindeki `NEWS_CURRENCIES` ile değiştirilebilir; `ALL` hepsini getirir.
+- **Diğer ayarlar:** bülten saati `NEWS_HOUR` ile, hatırlatma süresi `NEWS_REMIND_MINUTES` ile değiştirilir (0 = kapalı).
+- **Açıklanan değer:** ForexFactory'nin JSON dışa aktarımında açıklanan değer (actual) alanı yok. Bu yüzden bot şimdilik açıklanan değeri göndermiyor.
 - **Gönderim penceresi:** mesaj sadece 08:00-10:00 arasında gönderilir. Bot bu saatlerde kapalıysa o günün mesajı atlanır; gün içinde `/haber` ile istenebilir.
 - **İstek sınırı:** ForexFactory sık istekte engelliyor (HTTP 429). Bu yüzden takvim 30 dakika önbellekte tutulur. Takvim alınamazsa bot bir saat boyunca 5 dakikada bir tekrar dener, olmazsa uyarı gönderir.
 

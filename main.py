@@ -63,8 +63,10 @@ class Bot:
         self.rearm = float(os.getenv("REARM_EM", "0.25"))
         self.swing_len = int(os.getenv("SWING_LEN", "2"))
         self.news_hour = int(os.getenv("NEWS_HOUR", "8"))
-        self.news_currencies = {c.strip().upper() for c in os.getenv("NEWS_CURRENCIES", "USD").split(",") if c.strip()}
+        self.news_currencies = {c.strip().upper() for c in os.getenv("NEWS_CURRENCIES", "USD,EUR").split(",") if c.strip()}
+        self.news_before = int(os.getenv("NEWS_REMIND_MINUTES", "5"))
         self.news_retry_at = 0.0
+        self.news_reminded: set[str] = set()
         self.lock = threading.Lock()
         self.muted_until = 0.0
         self.set_at: datetime | None = None
@@ -91,6 +93,7 @@ class Bot:
         self.notify(f"EM bot başladı · {len(self.engine.symbols)} parite")
         while True:
             self._morning_news()
+            self._news_reminders()
             if feed.market_open():
                 self.tick()
             time.sleep(self.poll)
@@ -120,6 +123,26 @@ class Bot:
         NEWS_FILE.write_text(today)
         log.info(msg.replace("\n", " | "))
         self.notify(msg)
+
+    def _news_reminders(self) -> None:
+        """Açıklanmasına NEWS_REMIND_MINUTES kalan kırmızı/turuncu haberler için hatırlatma."""
+        if self.news_before <= 0:
+            return
+        now = datetime.now(news.TR)
+        try:
+            # +1 sn: tam N dakika kala olan haber de pencereye girsin (bitiş hariç)
+            due = news.upcoming(self.news_currencies, now, timedelta(minutes=self.news_before, seconds=1))
+        except Exception as e:
+            log.debug("hatırlatma için takvim yok: %s", e)
+            return
+        new = [e for e in due if news.key(e) not in self.news_reminded]
+        if not new:
+            return
+        self.news_reminded.update(news.key(e) for e in new)
+        for at in sorted({e["at"] for e in new}):
+            msg = news.reminder(self.news_currencies, [e for e in new if e["at"] == at])
+            log.info(msg.replace("\n", " | "))
+            self.notify(msg)
 
     def tick(self) -> None:
         with self.lock:
