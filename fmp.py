@@ -24,9 +24,13 @@ WORDS = {"adv": "advance", "prel": "preliminary", "prelim": "preliminary", "flas
          "refinancing": "rate", "decision": "rate", "interest": "rate"}
 
 
+class PlanError(RuntimeError):
+    """Abonelik planı ekonomik takvimi kapsamıyor (ücretsiz plan: HTTP 402)."""
+
+
 def fetch(api_key: str, day: date) -> list[dict]:
     """O günün (UTC) FMP takvimi. Hata mesajlarına URL konmaz: içinde API anahtarı var."""
-    last = ""
+    last, codes = "", set()
     for url in URLS:
         try:
             r = requests.get(url, params={"from": day.isoformat(), "to": day.isoformat(), "apikey": api_key}, timeout=20)
@@ -34,7 +38,11 @@ def fetch(api_key: str, day: date) -> list[dict]:
             raise RuntimeError(f"FMP bağlantı hatası: {type(e).__name__}") from None
         if r.status_code == 200 and isinstance(r.json(), list):
             return r.json()
+        codes.add(r.status_code)
         last = f"HTTP {r.status_code}: {r.text[:200]}"
+    # 402: güncel adres planda yok, 403: eski adres sadece eski abonelere açık
+    if codes <= {402, 403}:
+        raise PlanError(last)
     raise RuntimeError(f"FMP: {last}")
 
 

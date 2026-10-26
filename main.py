@@ -162,11 +162,17 @@ class Bot:
         pending = [e for e in recent if (e["forecast"] or e["previous"]) and news.key(e) not in self.results_sent]
         if not pending:
             return
-        self.fmp_next = time.time() + 60  # ücretsiz plan: günlük istek sınırı var
+        self.fmp_next = time.time() + 60  # günlük istek sınırı var
         fmp_events = []
         try:
             for day in sorted({e["at"].astimezone(timezone.utc).date() for e in pending}):
                 fmp_events += fmp.fetch(self.fmp_key, day)
+        except fmp.PlanError as e:
+            # Plan yükseltilene kadar boşuna istek atma; bot yeniden başlayınca tekrar denenir
+            self.fmp_key = ""
+            log.warning("FMP planı ekonomik takvimi kapsamıyor, sonuç bildirimi kapatıldı: %s", e)
+            self.notify("⚠️ FMP planın ekonomik takvimi kapsamıyor, haber sonuçları gönderilmeyecek")
+            return
         except Exception as e:
             log.warning("FMP alınamadı: %s", e)
             return
