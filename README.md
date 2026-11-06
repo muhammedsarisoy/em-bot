@@ -65,11 +65,12 @@ Sohbette `/` yazınca komut menüsü açılır.
 `/alarm NVDA 185.5` yazınca bot fiyat o seviyeye geldiğinde bildirim atar. Yön sorulmaz: fiyat seviyenin altındaysa yukarı çıkınca, üstündeyse aşağı inince çalışır. Gap ile seviyenin üstünden atlasa da tetiklenir.
 
 - Sembol haftalık listede olmak zorunda değil. Yahoo'da bulunan her sembol olur (ör. `AAPL`, `SPX`, `BTC-USD`). Kurarken son fiyat çekilir, sembol yanlışsa bot bunu söyler.
+- **Altın:** `/alarm ALTIN 2650` (ya da `XAUUSD`, `GOLD`). Yahoo'da spot altın yok, vadeli kontrat `GC=F` kullanılır; fiyatı broker'daki XAUUSD'den birkaç dolar farklı olabilir. Gümüş için `GUMUS`/`XAGUSD` (`SI=F`).
 - Fiyat `185.5`, `185,5` ya da `4.250,75` şeklinde yazılabilir.
 - Tetiklenen alarm silinir. Aynı seviyeye tekrar alarm için yeniden kur.
 - Alarmlar `/sessiz` açıkken de gelir, çünkü onları sen kurdun.
 - Alarmlar `data/alarms.json` dosyasında durur, bot yeniden başlasa da kaybolmaz. En fazla 30 alarm kurulabilir.
-- Diğer bildirimler gibi sadece ABD seans saatinde kontrol edilir.
+- Alarmlar seans dışında da kontrol edilir (altın, kripto gibi gece de işlem görenler için). EM seviye bildirimleri yine sadece ABD seansında.
 
 ## Sunucu işlemleri
 
@@ -85,5 +86,5 @@ Sohbette `/` yazınca komut menüsü açılır.
 ## Notlar
 
 - **Fiyat kaynağı:** fiyatlar Yahoo Finance'ten gelir. Ücretsizdir ama resmi bir kaynak değildir ve birkaç saniye gecikebilir.
-- **Çalışma saatleri:** bot fiyatları yalnızca ABD seans saatinde (09:30-16:00 New York) kontrol eder. Komutlara her zaman cevap verir.
+- **Çalışma saatleri:** EM seviyelerini yalnızca ABD seans saatinde (09:30-16:00 New York) kontrol eder. Fiyat alarmları her zaman kontrol edilir. Komutlara her zaman cevap verir.
 - **Sembol eşlemesi:** SPX ve NDX, Yahoo'da `^GSPC` ve `^NDX` olarak çekilir. Yeni bir eşleme gerekirse `levels.py` içindeki `YAHOO` sözlüğüne ekle.

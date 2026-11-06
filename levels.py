@@ -25,7 +25,12 @@ LEVELS = [
 LABEL = {k: label for k, label, _ in LEVELS}
 
 # Yahoo'da farklı yazılan semboller. Listede olmayan sembol aynen kullanılır.
-YAHOO = {"SPX": "^GSPC", "NDX": "^NDX"}
+# Altın/gümüş: Yahoo'da spot yok, vadeli kontrat (GC=F, SI=F) kullanılır.
+YAHOO = {
+    "SPX": "^GSPC", "NDX": "^NDX",
+    "XAUUSD": "GC=F", "GOLD": "GC=F", "ALTIN": "GC=F",
+    "XAGUSD": "SI=F", "SILVER": "SI=F", "GUMUS": "SI=F", "GÜMÜŞ": "SI=F",
+}
 
 
 @dataclass

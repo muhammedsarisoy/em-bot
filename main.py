@@ -29,7 +29,7 @@ log = logging.getLogger("em-bot")
 COMMANDS = [
     ("durum", "Pariteler EM içinde nerede · /durum NVDA: grafik"),
     ("haber", "Önümüzdeki 24 saatin kırmızı/turuncu haberleri"),
-    ("alarm", "Fiyat alarmı · /alarm NVDA 185.5 · /alarm: liste"),
+    ("alarm", "Fiyat alarmı · /alarm NVDA 185.5 · /alarm ALTIN 2650"),
     ("seviye", "Bir paritenin tüm seviyeleri · /seviye NVDA"),
     ("sessiz", "Bildirimleri kapat · /sessiz 30 (dk)"),
     ("ac", "Bildirimleri aç"),
@@ -45,6 +45,7 @@ Haftalık veri: sembol + PWC + EM listesini olduğu gibi yapıştır (komut gere
 /haber - önümüzdeki 24 saatin kırmızı/turuncu haberleri (her hafta içi sabah da otomatik gelir)
 /seviye NVDA - bir paritenin tüm seviyeleri
 /alarm NVDA 185.5 - fiyat 185.5'e gelince alarm (sonuna not yazılabilir: /alarm NVDA 185.5 kırılırsa long)
+/alarm ALTIN 2650 - altın (Yahoo'da vadeli GC=F, XAUUSD'den biraz farklı olabilir)
 /alarm - kurulu alarmlar
 /alarm sil 2 - 2. alarmı sil (/alarm sil NVDA, /alarm sil hepsi)
 /sessiz 30 - 30 dk bildirim kapalı (varsayılan 60)
@@ -106,8 +107,7 @@ class Bot:
             self._morning_news()
             self._news_reminders()
             self._news_results()
-            if feed.market_open():
-                self.tick()
+            self.tick()
             time.sleep(self.poll)
 
     def _morning_news(self) -> None:
@@ -194,17 +194,23 @@ class Bot:
             self.notify(msg)
 
     def tick(self) -> None:
+        # EM seviyeleri sadece ABD seansında; alarmlar her zaman (altın, kripto gece de işlem görür)
+        market = feed.market_open()
         with self.lock:
             engine = self.engine
-            tickers = list(dict.fromkeys([s.ticker for s in engine.symbols.values()] + self.alarms.tickers()))
+            em = [s.ticker for s in engine.symbols.values()] if market else []
+            tickers = list(dict.fromkeys(em + self.alarms.tickers()))
         if not tickers:
             return
-        if engine.symbols:
+        if em:
             self._remind_if_stale()
         try:
             data = feed.fetch(tickers, period="2d")
             self.failures = 0
         except Exception as e:
+            if not market:  # seans dışında Yahoo boş dönebilir; logu boğma, uyarı atma
+                log.debug("seans dışı fiyat alınamadı: %s", e)
+                return
             self.failures += 1
             log.warning("fiyat alınamadı (%d): %s", self.failures, e)
             if self.failures == 5:
@@ -221,6 +227,8 @@ class Bot:
             # Alarmı kullanıcı kendisi kurdu; /sessiz'de de gelsin
             log.info(m.replace("\n", " | "))
             self.tg.broadcast(m)
+        if not market:
+            return
         msgs = []
         with self.lock:
             if engine is not self.engine:  # bu arada yeni hafta verisi geldi
@@ -378,14 +386,12 @@ class Bot:
             ticker = Alarms.ticker_of(name)
             df = feed.fetch([ticker], period="5d", interval="5m").get(ticker)
             if df is None:
-                return f"{name} için fiyat bulunamadı. Yahoo sembolünü kontrol et (ör. NVDA, SPX, BTC-USD)"
+                return f"{name} için fiyat bulunamadı. Yahoo sembolünü kontrol et (ör. NVDA, SPX, ALTIN, BTC-USD)"
             now = float(df["Close"].iloc[-1])
         with self.lock:
             a = self.alarms.add(name, price, now, note)
         diff = (price - now) / now * 100
         lines = [f"⏰ Alarm kuruldu: {a.line()}", f"Şu an {fmt(now)} · {diff:+.2f}%"]
-        if not feed.market_open():
-            lines.append("Piyasa kapalı, açılınca kontrol edilir")
         return "\n".join(lines)
 
     def levels(self, name: str) -> str:

@@ -16,7 +16,7 @@ import pandas as pd
 from levels import YAHOO, fmt
 
 MAX_ALARMS = 30
-NAME = re.compile(r"[A-Za-z0-9^.=\-]{1,15}")
+NAME = re.compile(r"[\w^.=\-]{1,15}")
 
 
 @dataclass
