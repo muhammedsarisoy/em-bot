@@ -55,14 +55,27 @@ Sohbette `/` yazınca komut menüsü açılır.
 - `/durum NVDA`: bu haftanın 15m grafiği, EM seviyeleri çizili. Zaman dilimi seçilebilir: `/durum NVDA 5m`, `1h`
 - `/haber`: önümüzdeki 24 saatin kırmızı/turuncu ForexFactory haberleri
 - `/seviye NVDA`: bir paritenin tüm seviyeleri
+- `/alarm NVDA 185.5`: fiyat 185.5'e gelince alarm. Sonuna not yazılabilir: `/alarm NVDA 185.5 kırılırsa long`
+- `/alarm`: kurulu alarmlar · `/alarm sil 2`, `/alarm sil NVDA`, `/alarm sil hepsi`
 - `/sessiz 30`, `/ac`: bildirimleri kapat/aç
 - `/test`: saate bildirim düşüyor mu dene
+
+## Fiyat alarmı
+
+`/alarm NVDA 185.5` yazınca bot fiyat o seviyeye geldiğinde bildirim atar. Yön sorulmaz: fiyat seviyenin altındaysa yukarı çıkınca, üstündeyse aşağı inince çalışır. Gap ile seviyenin üstünden atlasa da tetiklenir.
+
+- Sembol haftalık listede olmak zorunda değil. Yahoo'da bulunan her sembol olur (ör. `AAPL`, `SPX`, `BTC-USD`). Kurarken son fiyat çekilir, sembol yanlışsa bot bunu söyler.
+- Fiyat `185.5`, `185,5` ya da `4.250,75` şeklinde yazılabilir.
+- Tetiklenen alarm silinir. Aynı seviyeye tekrar alarm için yeniden kur.
+- Alarmlar `/sessiz` açıkken de gelir, çünkü onları sen kurdun.
+- Alarmlar `data/alarms.json` dosyasında durur, bot yeniden başlasa da kaybolmaz. En fazla 30 alarm kurulabilir.
+- Diğer bildirimler gibi sadece ABD seans saatinde kontrol edilir.
 
 ## Sunucu işlemleri
 
 - **Kod güncellemek:** `./deploy.sh`. `.env` değiştiyse `./deploy.sh --env`.
 - **Logları görmek:** sunucuda `cd em-bot && docker compose logs -f`.
-- **Hafta verisi:** sunucudaki `~/em-bot/data/week.json` dosyasında durur.
+- **Hafta verisi ve alarmlar:** sunucudaki `~/em-bot/data/week.json` ve `~/em-bot/data/alarms.json` dosyalarında durur.
 - **Yeniden başlatma:** container `restart: unless-stopped` ile çalışır. Çökerse ya da sunucu yeniden başlarsa bot kendiliğinden açılır.
 
 ## Yerelde deneme

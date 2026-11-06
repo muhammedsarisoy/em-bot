@@ -11,6 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import chart
+from alarm import MAX_ALARMS, NAME, Alarms, parse_price
 import feed
 import fmp
 import news
@@ -21,12 +22,14 @@ from tg import Telegram
 ROOT = Path(__file__).parent
 WEEK_FILE = ROOT / "data" / "week.json"
 NEWS_FILE = ROOT / "data" / "news_sent"  # son sabah haber bildiriminin tarihi
+ALARM_FILE = ROOT / "data" / "alarms.json"
 log = logging.getLogger("em-bot")
 
 # Telegram'da '/' yazınca açılan menü
 COMMANDS = [
     ("durum", "Pariteler EM içinde nerede · /durum NVDA: grafik"),
     ("haber", "Önümüzdeki 24 saatin kırmızı/turuncu haberleri"),
+    ("alarm", "Fiyat alarmı · /alarm NVDA 185.5 · /alarm: liste"),
     ("seviye", "Bir paritenin tüm seviyeleri · /seviye NVDA"),
     ("sessiz", "Bildirimleri kapat · /sessiz 30 (dk)"),
     ("ac", "Bildirimleri aç"),
@@ -41,6 +44,9 @@ Haftalık veri: sembol + PWC + EM listesini olduğu gibi yapıştır (komut gere
 /durum NVDA 5m - zaman dilimi seç: 5m, 15m, 1h
 /haber - önümüzdeki 24 saatin kırmızı/turuncu haberleri (her hafta içi sabah da otomatik gelir)
 /seviye NVDA - bir paritenin tüm seviyeleri
+/alarm NVDA 185.5 - fiyat 185.5'e gelince alarm (sonuna not yazılabilir: /alarm NVDA 185.5 kırılırsa long)
+/alarm - kurulu alarmlar
+/alarm sil 2 - 2. alarmı sil (/alarm sil NVDA, /alarm sil hepsi)
 /sessiz 30 - 30 dk bildirim kapalı (varsayılan 60)
 /ac - bildirimleri aç
 /test - saate bildirim düşüyor mu dene"""
@@ -75,6 +81,7 @@ class Bot:
         self.muted_until = 0.0
         self.set_at: datetime | None = None
         self.engine = Engine([], self.rearm)
+        self.alarms = Alarms(ALARM_FILE)
         self.reminded = None
         self.failures = 0
         self.last_fetch = None
@@ -189,11 +196,13 @@ class Bot:
     def tick(self) -> None:
         with self.lock:
             engine = self.engine
-        if not engine.symbols:
+            tickers = list(dict.fromkeys([s.ticker for s in engine.symbols.values()] + self.alarms.tickers()))
+        if not tickers:
             return
-        self._remind_if_stale()
+        if engine.symbols:
+            self._remind_if_stale()
         try:
-            data = feed.fetch([s.ticker for s in engine.symbols.values()], period="2d")
+            data = feed.fetch(tickers, period="2d")
             self.failures = 0
         except Exception as e:
             self.failures += 1
@@ -202,10 +211,16 @@ class Bot:
                 self.notify("⚠️ EM bot: 5 kez üst üste fiyat verisi alınamadı")
             return
         # Her poll'da değil, sadece gelen parite sayısı değişince logla (yeni hafta, eksik veri)
-        got = (id(engine), len(data))
+        got = (id(engine), len(data), len(tickers))
         if got != self.last_fetch:
             self.last_fetch = got
-            log.info("fiyatlar geliyor: %d/%d parite", len(data), len(engine.symbols))
+            log.info("fiyatlar geliyor: %d/%d sembol", len(data), len(tickers))
+        with self.lock:
+            alarm_msgs = self.alarms.check(data)
+        for m in alarm_msgs:
+            # Alarmı kullanıcı kendisi kurdu; /sessiz'de de gelsin
+            log.info(m.replace("\n", " | "))
+            self.tg.broadcast(m)
         msgs = []
         with self.lock:
             if engine is not self.engine:  # bu arada yeni hafta verisi geldi
@@ -265,6 +280,8 @@ class Bot:
             return news.message(self.news_currencies, datetime.now(news.TR))
         if cmd == "/seviye":
             return self.levels(arg.upper())
+        if cmd == "/alarm":
+            return self.alarm(parts[1:])
         if cmd == "/sessiz":
             mins = min(int(arg), 24 * 60) if arg.isdigit() else 60  # en fazla 1 gün
             self.muted_until = time.time() + mins * 60
@@ -335,6 +352,41 @@ class Bot:
         z = s.z(float(df["Close"].iloc[-1]))
         caption = f"{s.name} {fmt(float(df['Close'].iloc[-1]))} · {z:+.2f} EM · {zone(z)}"
         return Photo(chart.render(s, df, interval.replace("60m", "1h")), caption)
+
+    def alarm(self, args: list[str]) -> str:
+        if not args:
+            with self.lock:
+                return self.alarms.listing()
+        if args[0].lower() == "sil":
+            if len(args) < 2:
+                return "Örnek: /alarm sil 2 · /alarm sil NVDA · /alarm sil hepsi"
+            with self.lock:
+                gone = self.alarms.remove(args[1])
+                rest = self.alarms.listing() if self.alarms.items else ""
+            if not gone:
+                return f"Silinecek alarm yok: {args[1]}\n/alarm ile listeye bak"
+            return "🗑 Silindi: " + ", ".join(a.line() for a in gone) + (f"\n\n{rest}" if rest else "")
+        price = parse_price(args[1]) if len(args) > 1 else None
+        if not NAME.fullmatch(args[0]) or price is None:
+            return "Örnek: /alarm NVDA 185.5\nSonuna not ekleyebilirsin: /alarm NVDA 185.5 kırılırsa long"
+        name, note = args[0].upper(), " ".join(args[2:])
+        with self.lock:
+            if len(self.alarms.items) >= MAX_ALARMS:
+                return f"En fazla {MAX_ALARMS} alarm kurulabilir. /alarm sil ile yer aç"
+            now = self.engine.prices.get(name)
+        if now is None:  # haftalık listede yok ya da piyasa kapalı: son fiyatı çek
+            ticker = Alarms.ticker_of(name)
+            df = feed.fetch([ticker], period="5d", interval="5m").get(ticker)
+            if df is None:
+                return f"{name} için fiyat bulunamadı. Yahoo sembolünü kontrol et (ör. NVDA, SPX, BTC-USD)"
+            now = float(df["Close"].iloc[-1])
+        with self.lock:
+            a = self.alarms.add(name, price, now, note)
+        diff = (price - now) / now * 100
+        lines = [f"⏰ Alarm kuruldu: {a.line()}", f"Şu an {fmt(now)} · {diff:+.2f}%"]
+        if not feed.market_open():
+            lines.append("Piyasa kapalı, açılınca kontrol edilir")
+        return "\n".join(lines)
 
     def levels(self, name: str) -> str:
         s = self.engine.symbols.get(name)
